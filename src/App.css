@@ -1,0 +1,84 @@
+.app-container {
+  height: 100%;
+  width: 100%;
+}
+
+/* Tailwind-like utility classes */
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.max-w-7xl {
+  max-width: 80rem;
+}
+
+.max-w-4xl {
+  max-width: 56rem;
+}
+
+.max-w-md {
+  max-width: 28rem;
+}
+
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+.from-purple-50 {
+  --tw-gradient-from: #faf5ff;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(250, 245, 255, 0));
+}
+
+.to-blue-50 {
+  --tw-gradient-to: #eff6ff;
+}
+
+.from-blue-50 {
+  --tw-gradient-from: #eff6ff;
+}
+
+.to-purple-50 {
+  --tw-gradient-to: #faf5ff;
+}
+
+.from-purple-50 {
+  --tw-gradient-from: #faf5ff;
+}
+
+.to-pink-50 {
+  --tw-gradient-to: #fdf2f8;
+}
+
+.from-orange-50 {
+  --tw-gradient-from: #fff7ed;
+}
+
+.to-yellow-50 {
+  --tw-gradient-to: #fefce8;
+}
+
+.from-green-50 {
+  --tw-gradient-from: #f0fdf4;
+}
+
+.to-emerald-50 {
+  --tw-gradient-to: #ecfdf5;
+}
+
+.from-red-50 {
+  --tw-gradient-from: #fef2f2;
+}
+
+.from-blue-50 {
+  --tw-gradient-from: #eff6ff;
+}
+
+.to-cyan-50 {
+  --tw-gradient-to: #ecfeff;
+}
+
