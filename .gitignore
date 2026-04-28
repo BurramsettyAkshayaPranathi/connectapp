@@ -11,6 +11,14 @@ node_modules
 dist
 dist-ssr
 *.local
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/src/main/resources/application-local.properties
+backend/target/
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +30,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+/.metadata/

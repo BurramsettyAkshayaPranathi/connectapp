@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { STORAGE_KEYS, saveToStorage, getFromStorage } from '../utils/storage';
+import React, { useEffect, useState } from 'react';
+import { createRequest, fetchDrives, fetchRequestsByUser } from '../utils/api';
+import DashboardShell from './DashboardShell';
+import FeedbackPanel from './FeedbackPanel';
+import FilterToolbar from './FilterToolbar';
+import { buildFilterOptions, formatLabel, matchesSearch } from '../utils/dashboard';
+
+const recipientModules = [
+  { id: 'overview', label: 'Overview', description: 'Need summary and support status' },
+  { id: 'request', label: 'Request Help', description: 'Submit a new support request' },
+  { id: 'campaigns', label: 'Drives', description: 'Browse active matching drives' },
+  { id: 'history', label: 'My Requests', description: 'Review submitted requests' }
+];
 
 function RecipientDashboard({ user, onLogout }) {
+  const [activeModule, setActiveModule] = useState('overview');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -10,310 +22,339 @@ function RecipientDashboard({ user, onLogout }) {
     location: '',
     priority: 'high'
   });
-
   const [message, setMessage] = useState('');
+  const [myRequests, setMyRequests] = useState([]);
+  const [drives, setDrives] = useState([]);
+  const [error, setError] = useState('');
+  const [campaignSearch, setCampaignSearch] = useState('');
+  const [campaignCategory, setCampaignCategory] = useState('all');
+  const [campaignPriority, setCampaignPriority] = useState('all');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyPriority, setHistoryPriority] = useState('all');
+  const [historyStatus, setHistoryStatus] = useState('all');
 
-  const myRequests = getFromStorage(STORAGE_KEYS.REQUESTS)
-    .filter(r => r.created_by === user.email);
+  useEffect(() => {
+    let isMounted = true;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+    Promise.all([fetchRequestsByUser(user.email), fetchDrives()])
+      .then(([requests, driveData]) => {
+        if (isMounted) {
+          setMyRequests(requests);
+          setDrives(driveData);
+        }
+      })
+      .catch((apiError) => {
+        if (isMounted) {
+          setError(apiError.message || 'Failed to load requests.');
+        }
+      });
 
-    const newRequest = {
-      ...formData,
-      id: Date.now(),
-      quantity: Number(formData.quantity) || 0,
-      status: 'open',
-      recipient_name: user.name,
-      created_by: user.email,
-      created_at: new Date().toISOString()
+    return () => {
+      isMounted = false;
     };
+  }, [user.email]);
 
-    const allRequests = getFromStorage(STORAGE_KEYS.REQUESTS);
-    allRequests.push(newRequest);
-    saveToStorage(STORAGE_KEYS.REQUESTS, allRequests);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    setMessage("Request submitted successfully!");
-    setFormData({
-      title: '',
-      description: '',
-      category: 'food',
-      quantity: '',
-      location: '',
-      priority: 'high'
-    });
+    try {
+      const newRequest = await createRequest({
+        ...formData,
+        quantity: Number(formData.quantity) || 0,
+        recipientName: user.name,
+        createdByEmail: user.email
+      });
 
-    setTimeout(() => setMessage(''), 3000);
+      setMyRequests((currentRequests) => [newRequest, ...currentRequests]);
+      setMessage('Request submitted successfully.');
+      setError('');
+      setFormData({
+        title: '',
+        description: '',
+        category: 'food',
+        quantity: '',
+        location: '',
+        priority: 'high'
+      });
+      setTimeout(() => setMessage(''), 3000);
+    } catch (apiError) {
+      setError(apiError.message || 'Failed to submit request.');
+    }
+  };
+
+  const openRequests = myRequests.filter((item) => formatLabel(item.status) === 'open').length;
+  const criticalRequests = myRequests.filter((item) => formatLabel(item.priority) === 'high').length;
+  const fulfilledRequests = myRequests.filter((item) => formatLabel(item.status) === 'fulfilled').length;
+  const filteredDrives = drives.filter((drive) => (
+    matchesSearch(drive, campaignSearch, ['title', 'description', 'location'])
+    && (campaignCategory === 'all' || formatLabel(drive.category) === campaignCategory)
+    && (campaignPriority === 'all' || formatLabel(drive.priority) === campaignPriority)
+  ));
+  const filteredRequests = myRequests.filter((request) => (
+    matchesSearch(request, historySearch, ['title', 'description', 'location'])
+    && (historyPriority === 'all' || formatLabel(request.priority) === historyPriority)
+    && (historyStatus === 'all' || formatLabel(request.status) === historyStatus)
+  ));
+
+  const renderModule = () => {
+    if (activeModule === 'request') {
+      return (
+        <>
+          <article className="section-card workbench-card">
+            <div className="section-head">
+              <div>
+                <h2>Submit a request</h2>
+                <p>Describe the need, urgency, and delivery destination.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="ops-form">
+              <input className="ops-input focus-outline" type="text" placeholder="What do you need most?" required value={formData.title} onChange={(event) => setFormData({ ...formData, title: event.target.value })} />
+              <textarea className="ops-input ops-textarea focus-outline" rows="4" placeholder="Additional details about the household or situation" value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value })} />
+              <div className="ops-form__row recipient-form-grid">
+                <select className="ops-input focus-outline" value={formData.category} onChange={(event) => setFormData({ ...formData, category: event.target.value })}>
+                  <option value="food">Food</option>
+                  <option value="clothing">Clothing</option>
+                  <option value="shelter">Shelter</option>
+                  <option value="medical">Medical</option>
+                  <option value="other">Other</option>
+                </select>
+                <input className="ops-input focus-outline" type="number" min="1" placeholder="Quantity" value={formData.quantity} onChange={(event) => setFormData({ ...formData, quantity: event.target.value })} />
+                <select className="ops-input focus-outline" value={formData.priority} onChange={(event) => setFormData({ ...formData, priority: event.target.value })}>
+                  <option value="high">Critical</option>
+                  <option value="medium">Within 3 days</option>
+                  <option value="low">Flexible</option>
+                </select>
+              </div>
+              <input className="ops-input focus-outline" type="text" placeholder="Delivery location" value={formData.location} onChange={(event) => setFormData({ ...formData, location: event.target.value })} />
+              {message && <div className="status-banner success">{message}</div>}
+              <button type="submit" className="primary-btn focus-outline">Submit Request</button>
+            </form>
+          </article>
+        </>
+      );
+    }
+
+    if (activeModule === 'campaigns') {
+      return (
+        <>
+          <FilterToolbar
+            title="Browse matching drives"
+            searchValue={campaignSearch}
+            onSearchChange={setCampaignSearch}
+            searchPlaceholder="Search drives by title, location, or description"
+            filters={[
+              {
+                label: 'categories',
+                value: campaignCategory,
+                onChange: setCampaignCategory,
+                options: buildFilterOptions(drives, 'category')
+              },
+              {
+                label: 'priorities',
+                value: campaignPriority,
+                onChange: setCampaignPriority,
+                options: buildFilterOptions(drives, 'priority')
+              }
+            ]}
+          />
+          <article className="section-card list-card">
+            <div className="section-head">
+              <div>
+                <h2>Current drives</h2>
+                <p>Campaigns that may align with your request.</p>
+              </div>
+              <span className="pill">{filteredDrives.length} drives</span>
+            </div>
+            <div className="record-list">
+              {filteredDrives.length === 0 ? (
+                <div className="empty-state">No drives available yet.</div>
+              ) : (
+                filteredDrives.map((drive) => (
+                  <div key={drive.id} className="record-row">
+                    <div>
+                      <strong>{drive.title}</strong>
+                      <p>{drive.description || drive.location || 'Drive details pending'}</p>
+                    </div>
+                    <div className="record-meta">
+                      <span>{drive.location || 'No location'}</span>
+                      <span>{formatLabel(drive.category)}</span>
+                      <span>{formatLabel(drive.priority)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+        </>
+      );
+    }
+
+    if (activeModule === 'history') {
+      return (
+        <>
+          <div className="metric-grid metric-grid--3">
+            <article className="section-card metric-card accent-orange">
+              <small>Open</small>
+              <strong>{openRequests}</strong>
+              <span>Requests still waiting for support</span>
+            </article>
+            <article className="section-card metric-card accent-red">
+              <small>Critical</small>
+              <strong>{criticalRequests}</strong>
+              <span>Requests marked with high urgency</span>
+            </article>
+            <article className="section-card metric-card accent-blue">
+              <small>Fulfilled</small>
+              <strong>{fulfilledRequests}</strong>
+              <span>Requests already completed successfully</span>
+            </article>
+          </div>
+          <FilterToolbar
+            title="Filter my requests"
+            searchValue={historySearch}
+            onSearchChange={setHistorySearch}
+            searchPlaceholder="Search requests by title, details, or location"
+            filters={[
+              {
+                label: 'priorities',
+                value: historyPriority,
+                onChange: setHistoryPriority,
+                options: buildFilterOptions(myRequests, 'priority')
+              },
+              {
+                label: 'statuses',
+                value: historyStatus,
+                onChange: setHistoryStatus,
+                options: buildFilterOptions(myRequests, 'status')
+              }
+            ]}
+          />
+          <article className="section-card list-card">
+            <div className="section-head">
+              <div>
+                <h2>My requests</h2>
+                <p>Follow the state of each essential-item request.</p>
+              </div>
+            </div>
+            <div className="record-list">
+              {filteredRequests.length === 0 ? (
+                <div className="empty-state">No requests submitted yet.</div>
+              ) : (
+                filteredRequests.map((request) => (
+                  <div key={request.id} className="record-row">
+                    <div>
+                      <strong>{request.title}</strong>
+                      <p>{request.description || request.location || 'No additional details provided'}</p>
+                    </div>
+                    <div className="record-meta">
+                      <span>{formatLabel(request.category)}</span>
+                      <span>{request.quantity || 0} units</span>
+                      <span>{formatLabel(request.priority)}</span>
+                      <span>{formatLabel(request.status)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="metric-grid metric-grid--3">
+          <article className="section-card metric-card accent-red">
+            <small>My requests</small>
+            <strong>{myRequests.length}</strong>
+            <span>All requests submitted from your account</span>
+          </article>
+          <article className="section-card metric-card accent-orange">
+            <small>Open requests</small>
+            <strong>{openRequests}</strong>
+            <span>Requests still waiting for fulfillment</span>
+          </article>
+          <article className="section-card metric-card accent-blue">
+            <small>Critical items</small>
+            <strong>{criticalRequests}</strong>
+            <span>High-priority requests needing urgent support</span>
+          </article>
+        </div>
+
+        <div className="dashboard-grid">
+          <article className="section-card queue-card">
+            <div className="section-head">
+              <div>
+                <h2>Support pulse</h2>
+                <p>Understand your request flow before moving deeper.</p>
+              </div>
+            </div>
+            <div className="queue-list">
+              <div className="queue-item"><strong>{openRequests}</strong><span>Requests still waiting for action</span></div>
+              <div className="queue-item"><strong>{criticalRequests}</strong><span>Critical requests marked high priority</span></div>
+              <div className="queue-item"><strong>{drives.length}</strong><span>Active drives that may help you</span></div>
+              <div className="queue-item"><strong>{myRequests.length}</strong><span>Total requests tracked in your dashboard</span></div>
+            </div>
+          </article>
+
+          <article className="section-card list-card">
+            <div className="section-head">
+              <div>
+                <h2>Next steps</h2>
+                <p>Use the dashboard navigation to move between modules.</p>
+              </div>
+            </div>
+            <div className="record-list">
+              <div className="record-row">
+                <div>
+                  <strong>Request Help</strong>
+                  <p>Submit a new request with urgency, quantity, and location.</p>
+                </div>
+              </div>
+              <div className="record-row">
+                <div>
+                  <strong>Drives</strong>
+                  <p>See live campaigns that could align with your household needs.</p>
+                </div>
+              </div>
+              <div className="record-row">
+                <div>
+                  <strong>My Requests</strong>
+                  <p>Track statuses and review your previous submissions.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <FeedbackPanel user={user} role="recipient" moduleOptions={recipientModules} defaultModule="overview" />
+      </>
+    );
   };
 
   return (
-    <div className="container">
+    <>
+      <DashboardShell
+        eyebrow="Recipient Help Queue"
+        title="Request essentials and move page to page inside your recipient dashboard."
+        description="Use the internal dashboard navigation to switch between overview, request submission, active drives, and your request history."
+        user={user}
+        onLogout={onLogout}
+        modules={recipientModules}
+        activeModule={activeModule}
+        onModuleChange={setActiveModule}
+        dashboardClassName="recipient-dashboard"
+      >
+        {error && <div className="status-banner error">{error}</div>}
+        {renderModule()}
+      </DashboardShell>
 
-      {/* HEADER */}
-      <header className="header">
-        <div className="header-content">
-          <div>
-            <h1>Recipient Dashboard</h1>
-            <p>Request essentials and track deliveries</p>
-          </div>
-
-          <div className="header-right">
-            <p><strong>{user.name}</strong></p>
-            <p>{user.email}</p>
-            <button className="logout-btn" onClick={onLogout}>
-              🚪 Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="main">
-
-        {/* STATS */}
-        <div className="stats">
-          <div className="card red">
-            <p>My Requests</p>
-            <h2>{myRequests.length}</h2>
-          </div>
-
-          <div className="card red">
-            <p>Open Requests</p>
-            <h2>
-              {myRequests.filter(r => r.status === 'open').length}
-            </h2>
-          </div>
-        </div>
-
-        {/* FORM */}
-        <div className="card">
-          <h2>Submit New Request</h2>
-
-          <form onSubmit={handleSubmit} className="form">
-
-            <input
-              type="text"
-              placeholder="What do you need most?"
-              required
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-            />
-
-            <textarea
-              rows="3"
-              placeholder="Additional Details"
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-            />
-
-            <div className="row">
-              <select
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value })
-                }
-              >
-                <option value="food">Food</option>
-                <option value="clothing">Clothing</option>
-                <option value="shelter">Shelter</option>
-                <option value="medical">Medical</option>
-                <option value="other">Other</option>
-              </select>
-
-              <input
-                type="number"
-                min="1"
-                placeholder="Quantity"
-                value={formData.quantity}
-                onChange={(e) =>
-                  setFormData({ ...formData, quantity: e.target.value })
-                }
-              />
-
-              <select
-                value={formData.priority}
-                onChange={(e) =>
-                  setFormData({ ...formData, priority: e.target.value })
-                }
-              >
-                <option value="high">Critical</option>
-                <option value="medium">Within 3 days</option>
-                <option value="low">Flexible</option>
-              </select>
-            </div>
-
-            <input
-              type="text"
-              placeholder="Delivery Location"
-              value={formData.location}
-              onChange={(e) =>
-                setFormData({ ...formData, location: e.target.value })
-              }
-            />
-
-            {message && <div className="success">{message}</div>}
-
-            <button type="submit" className="submit-btn">
-              Submit Request
-            </button>
-
-          </form>
-        </div>
-
-        {/* MY REQUESTS */}
-        <div className="card">
-          <h2>My Requests</h2>
-
-          {myRequests.length === 0 ? (
-            <p className="empty">No requests submitted yet.</p>
-          ) : (
-            myRequests.map((request) => (
-              <div key={request.id} className="request-item">
-                <h3>{request.title}</h3>
-                {request.description && <p>{request.description}</p>}
-                <div className="meta">
-                  <span>📦 {request.category}</span>
-                  <span>🔢 {request.quantity}</span>
-                  <span>📍 {request.location || "N/A"}</span>
-                  <span>{request.priority}</span>
-                </div>
-                <span className="badge">{request.status}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-      </main>
-
-      {/* INTERNAL CSS */}
       <style>{`
-        body {
-          margin: 0;
-          font-family: Arial, sans-serif;
-        }
-
-        .container {
-          min-height: 100vh;
-          background: linear-gradient(to bottom right, #fef2f2, #fdf2f8);
-        }
-
-        .header {
-          background: white;
-          padding: 20px;
-          border-bottom: 4px solid #ef4444;
-        }
-
-        .header-content {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .logout-btn {
-          margin-top: 8px;
-          padding: 8px 14px;
-          background: #fee2e2;
-          color: #991b1b;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-
-        .main {
-          padding: 20px;
-          max-width: 1100px;
-          margin: auto;
-        }
-
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-
-        .card {
-          background: white;
-          padding: 20px;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          box-shadow: 0 5px 10px rgba(0,0,0,0.1);
-        }
-
-        .red {
-          border-left: 5px solid #ef4444;
-        }
-
-        .form {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .row {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 10px;
-        }
-
-        input, textarea, select {
-          padding: 8px;
-          border-radius: 8px;
-          border: 1px solid #ddd;
-        }
-
-        .submit-btn {
-          padding: 10px;
-          background: #ef4444;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-
-        .success {
-          background: #d1fae5;
-          color: #065f46;
-          padding: 8px;
-          border-radius: 6px;
-          text-align: center;
-        }
-
-        .request-item {
-          background: #fef2f2;
-          padding: 10px;
-          border-left: 4px solid #ef4444;
-          border-radius: 6px;
-          margin-top: 10px;
-        }
-
-        .meta {
-          display: flex;
-          gap: 10px;
-          font-size: 13px;
-          margin-top: 5px;
-        }
-
-        .badge {
-          display: inline-block;
-          margin-top: 5px;
-          padding: 4px 10px;
-          border-radius: 20px;
-          background: #fee2e2;
-          color: #991b1b;
-          font-size: 12px;
-        }
-
-        .empty {
-          text-align: center;
-          color: #555;
-        }
+        .metric-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .recipient-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        @media (max-width: 900px) { .metric-grid--3, .recipient-form-grid { grid-template-columns: 1fr; } }
       `}</style>
-
-    </div>
+    </>
   );
 }
 

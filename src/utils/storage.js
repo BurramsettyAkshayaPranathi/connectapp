@@ -3,7 +3,8 @@ export const STORAGE_KEYS = {
   DRIVES: 'relief_hub_drives',
   DONATIONS: 'relief_hub_donations',
   REQUESTS: 'relief_hub_requests',
-  SHIPMENTS: 'relief_hub_shipments'
+  SHIPMENTS: 'relief_hub_shipments',
+  FEEDBACK: 'relief_hub_feedback'
 };
 
 export const saveToStorage = (key, data) => {

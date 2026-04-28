@@ -1,302 +1,345 @@
-import React, { useState } from 'react';
-import { STORAGE_KEYS, saveToStorage, getFromStorage } from '../utils/storage';
+import React, { useEffect, useState } from 'react';
+import { createShipment, fetchDonations, fetchRequests, fetchShipments } from '../utils/api';
+import DashboardShell from './DashboardShell';
+import FeedbackPanel from './FeedbackPanel';
+import FilterToolbar from './FilterToolbar';
+import { buildFilterOptions, formatLabel, matchesSearch } from '../utils/dashboard';
+
+const logisticsModules = [
+  { id: 'overview', label: 'Overview', description: 'Dispatch summary and live counts' },
+  { id: 'shipments', label: 'Update Shipment', description: 'Create or update shipment progress' },
+  { id: 'queue', label: 'Dispatch Queue', description: 'Prioritize logistics workload' },
+  { id: 'ledger', label: 'Shipment Ledger', description: 'Review all shipment records' }
+];
 
 function LogisticsDashboard({ user, onLogout }) {
+  const [activeModule, setActiveModule] = useState('overview');
   const [formData, setFormData] = useState({
     title: '',
     location: '',
     status: 'in_transit',
-    logistics_contact: ''
+    logistics_contact: '',
+    linkedDonationId: '',
+    linkedRequestId: ''
   });
-
   const [message, setMessage] = useState('');
+  const [shipments, setShipments] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [error, setError] = useState('');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerStatus, setLedgerStatus] = useState('all');
 
-  const shipments = getFromStorage(STORAGE_KEYS.SHIPMENTS);
+  useEffect(() => {
+    let isMounted = true;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+    Promise.all([fetchShipments(), fetchRequests(), fetchDonations()])
+      .then(([allShipments, allRequests, allDonations]) => {
+        if (isMounted) {
+          setShipments(allShipments);
+          setRequests(allRequests);
+          setDonations(allDonations);
+        }
+      })
+      .catch((apiError) => {
+        if (isMounted) {
+          setError(apiError.message || 'Failed to load logistics data.');
+        }
+      });
 
-    const newShipment = {
-      ...formData,
-      id: Date.now(),
-      created_by: user.email,
-      created_at: new Date().toISOString()
+    return () => {
+      isMounted = false;
     };
+  }, []);
 
-    const allShipments = getFromStorage(STORAGE_KEYS.SHIPMENTS);
-    allShipments.push(newShipment);
-    saveToStorage(STORAGE_KEYS.SHIPMENTS, allShipments);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const selectedDonation = donations.find((donation) => String(donation.id) === formData.linkedDonationId);
+    const selectedRequest = requests.find((request) => String(request.id) === formData.linkedRequestId);
 
-    setMessage("Shipment updated successfully!");
-    setFormData({
-      title: '',
-      location: '',
-      status: 'in_transit',
-      logistics_contact: ''
-    });
+    try {
+      const newShipment = await createShipment({
+        title: formData.title,
+        location: formData.location,
+        status: formData.status,
+        logisticsContact: formData.logistics_contact,
+        createdByEmail: user.email,
+        donorEmail: selectedDonation?.createdByEmail || '',
+        recipientEmail: selectedRequest?.createdByEmail || '',
+        relatedDonationTitle: selectedDonation?.title || '',
+        relatedRequestTitle: selectedRequest?.title || ''
+      });
 
-    setTimeout(() => setMessage(''), 3000);
+      setShipments((currentShipments) => [newShipment, ...currentShipments]);
+      setMessage('Shipment updated successfully.');
+      setError('');
+      setFormData({
+        title: '',
+        location: '',
+        status: 'in_transit',
+        logistics_contact: '',
+        linkedDonationId: '',
+        linkedRequestId: ''
+      });
+      setTimeout(() => setMessage(''), 3000);
+    } catch (apiError) {
+      setError(apiError.message || 'Failed to save shipment.');
+    }
+  };
+
+  const inTransit = shipments.filter((shipment) => formatLabel(shipment.status) === 'in transit').length;
+  const delivered = shipments.filter((shipment) => formatLabel(shipment.status) === 'delivered').length;
+  const openRequests = requests.filter((request) => formatLabel(request.status) === 'open').length;
+  const pendingPickup = shipments.filter((shipment) => formatLabel(shipment.status) === 'pending pickup').length;
+  const filteredShipments = shipments.filter((shipment) => (
+    matchesSearch(shipment, ledgerSearch, ['title', 'location', 'logisticsContact'])
+    && (ledgerStatus === 'all' || formatLabel(shipment.status) === ledgerStatus)
+  ));
+
+  const renderModule = () => {
+    if (activeModule === 'shipments') {
+      return (
+        <>
+          <article className="section-card workbench-card">
+            <div className="section-head">
+              <div>
+                <h2>Update shipment status</h2>
+                <p>Track dispatch progress and maintain coordinator accountability.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="ops-form">
+              <input className="ops-input focus-outline" type="text" placeholder="Shipment reference" required value={formData.title} onChange={(event) => setFormData({ ...formData, title: event.target.value })} />
+              <div className="ops-form__row logistics-form-grid">
+                <input className="ops-input focus-outline" type="text" placeholder="Coordinator contact" value={formData.logistics_contact} onChange={(event) => setFormData({ ...formData, logistics_contact: event.target.value })} />
+                <select className="ops-input focus-outline" value={formData.status} onChange={(event) => setFormData({ ...formData, status: event.target.value })}>
+                  <option value="in_transit">In transit</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="pending_pickup">Pending pickup</option>
+                </select>
+              </div>
+              <div className="ops-form__row logistics-form-grid">
+                <select className="ops-input focus-outline" value={formData.linkedDonationId} onChange={(event) => setFormData({ ...formData, linkedDonationId: event.target.value })}>
+                  <option value="">Optional matched donation</option>
+                  {donations.map((donation) => (
+                    <option key={donation.id} value={donation.id}>
+                      {donation.title} ({donation.createdByEmail})
+                    </option>
+                  ))}
+                </select>
+                <select className="ops-input focus-outline" value={formData.linkedRequestId} onChange={(event) => setFormData({ ...formData, linkedRequestId: event.target.value })}>
+                  <option value="">Optional matched request</option>
+                  {requests.map((request) => (
+                    <option key={request.id} value={request.id}>
+                      {request.title} ({request.createdByEmail})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input className="ops-input focus-outline" type="text" placeholder="Current or destination location" value={formData.location} onChange={(event) => setFormData({ ...formData, location: event.target.value })} />
+              {(formData.linkedDonationId || formData.linkedRequestId) && (
+                <div className="status-banner success">
+                  Matching emails will be sent to the linked donor and recipient when this shipment is saved.
+                </div>
+              )}
+              {message && <div className="status-banner success">{message}</div>}
+              <button type="submit" className="primary-btn focus-outline">Save Shipment</button>
+            </form>
+          </article>
+        </>
+      );
+    }
+
+    if (activeModule === 'queue') {
+      return (
+        <>
+          <article className="section-card queue-card">
+            <div className="section-head">
+              <div>
+                <h2>Dispatch queue</h2>
+                <p>Quick operational signals for field movement.</p>
+              </div>
+            </div>
+            <div className="queue-list">
+              <div className="queue-item"><strong>{donations.length}</strong><span>Donations available for routing</span></div>
+              <div className="queue-item"><strong>{requests.length}</strong><span>Total recipient requests in the system</span></div>
+              <div className="queue-item"><strong>{openRequests}</strong><span>Open requests to prioritize</span></div>
+              <div className="queue-item"><strong>{inTransit}</strong><span>Live shipments to watch</span></div>
+            </div>
+          </article>
+        </>
+      );
+    }
+
+    if (activeModule === 'ledger') {
+      return (
+        <>
+          <div className="metric-grid metric-grid--3">
+            <article className="section-card metric-card accent-orange">
+              <small>Pending pickup</small>
+              <strong>{pendingPickup}</strong>
+              <span>Shipment entries still waiting to move</span>
+            </article>
+            <article className="section-card metric-card accent-blue">
+              <small>In transit</small>
+              <strong>{inTransit}</strong>
+              <span>Shipments actively moving through the network</span>
+            </article>
+            <article className="section-card metric-card accent-teal">
+              <small>Delivered</small>
+              <strong>{delivered}</strong>
+              <span>Shipments successfully completed</span>
+            </article>
+          </div>
+          <FilterToolbar
+            title="Filter shipment ledger"
+            searchValue={ledgerSearch}
+            onSearchChange={setLedgerSearch}
+            searchPlaceholder="Search by shipment, location, or coordinator"
+            filters={[
+              {
+                label: 'statuses',
+                value: ledgerStatus,
+                onChange: setLedgerStatus,
+                options: buildFilterOptions(shipments, 'status')
+              }
+            ]}
+          />
+          <article className="section-card list-card">
+            <div className="section-head">
+              <div>
+                <h2>Shipment ledger</h2>
+                <p>All recorded shipment updates from logistics coordinators.</p>
+              </div>
+            </div>
+            <div className="record-list">
+              {filteredShipments.length === 0 ? (
+                <div className="empty-state">No shipments tracked yet.</div>
+              ) : (
+                filteredShipments.map((shipment) => (
+                  <div key={shipment.id} className="record-row">
+                    <div>
+                      <strong>{shipment.title}</strong>
+                      <p>{shipment.logisticsContact || shipment.location || 'Coordinator details pending'}</p>
+                      {(shipment.relatedDonationTitle || shipment.relatedRequestTitle) && (
+                        <p>
+                          {shipment.relatedDonationTitle ? `Donation: ${shipment.relatedDonationTitle}` : 'Donation: N/A'}
+                          {' | '}
+                          {shipment.relatedRequestTitle ? `Request: ${shipment.relatedRequestTitle}` : 'Request: N/A'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="record-meta">
+                      <span>{shipment.location || 'No location'}</span>
+                      <span>{formatLabel(shipment.status)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="metric-grid metric-grid--4">
+          <article className="section-card metric-card accent-blue">
+            <small>Total shipments</small>
+            <strong>{shipments.length}</strong>
+            <span>All tracked movements across the platform</span>
+          </article>
+          <article className="section-card metric-card accent-orange">
+            <small>In transit</small>
+            <strong>{inTransit}</strong>
+            <span>Shipments currently on the move</span>
+          </article>
+          <article className="section-card metric-card accent-teal">
+            <small>Delivered</small>
+            <strong>{delivered}</strong>
+            <span>Completed delivery confirmations</span>
+          </article>
+          <article className="section-card metric-card accent-red">
+            <small>Open requests</small>
+            <strong>{openRequests}</strong>
+            <span>Pending needs that still require routing</span>
+          </article>
+        </div>
+
+        <div className="dashboard-grid">
+          <article className="section-card list-card">
+            <div className="section-head">
+              <div>
+                <h2>Movement summary</h2>
+                <p>See where dispatch attention is needed right now.</p>
+              </div>
+            </div>
+            <div className="record-list">
+              <div className="record-row">
+                <div>
+                  <strong>Update Shipment</strong>
+                  <p>Create a new shipment event or update a delivery status.</p>
+                </div>
+              </div>
+              <div className="record-row">
+                <div>
+                  <strong>Dispatch Queue</strong>
+                  <p>Use priority counts to decide what moves next.</p>
+                </div>
+              </div>
+              <div className="record-row">
+                <div>
+                  <strong>Shipment Ledger</strong>
+                  <p>Review all shipment records in one place.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article className="section-card queue-card">
+            <div className="section-head">
+              <div>
+                <h2>Workload pulse</h2>
+                <p>Fast operational indicators for the logistics team.</p>
+              </div>
+            </div>
+            <div className="queue-list">
+              <div className="queue-item"><strong>{donations.length}</strong><span>Donation records available to route</span></div>
+              <div className="queue-item"><strong>{requests.length}</strong><span>Recipient requests in planning scope</span></div>
+              <div className="queue-item"><strong>{shipments.length}</strong><span>Shipment records currently tracked</span></div>
+              <div className="queue-item"><strong>{delivered}</strong><span>Successfully completed deliveries</span></div>
+            </div>
+          </article>
+        </div>
+        <FeedbackPanel user={user} role="logistics" moduleOptions={logisticsModules} defaultModule="overview" />
+      </>
+    );
   };
 
   return (
-    <div className="container">
+    <>
+      <DashboardShell
+        eyebrow="Logistics Control"
+        title="Coordinate pickups and manage logistics from one dashboard."
+        description="Use the internal modules to switch between live overview, shipment updates, dispatch queue, and the shipment ledger."
+        user={user}
+        onLogout={onLogout}
+        modules={logisticsModules}
+        activeModule={activeModule}
+        onModuleChange={setActiveModule}
+        dashboardClassName="logistics-dashboard"
+      >
+        {error && <div className="status-banner error">{error}</div>}
+        {renderModule()}
+      </DashboardShell>
 
-      {/* HEADER */}
-      <header className="header">
-        <div className="header-content">
-          <div>
-            <h1>Logistics Dashboard</h1>
-            <p>Coordinate deliveries and manage inventory</p>
-          </div>
-
-          <div className="header-right">
-            <p><strong>{user.name}</strong></p>
-            <p>{user.email}</p>
-            <button className="logout-btn" onClick={onLogout}>
-              🚪 Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="main">
-
-        {/* STATS */}
-        <div className="stats">
-          <div className="card blue">
-            <p>Total Shipments</p>
-            <h2>{shipments.length}</h2>
-          </div>
-
-          <div className="card blue">
-            <p>In Transit</p>
-            <h2>{shipments.filter(s => s.status === 'in_transit').length}</h2>
-          </div>
-
-          <div className="card blue">
-            <p>Delivered</p>
-            <h2>{shipments.filter(s => s.status === 'delivered').length}</h2>
-          </div>
-        </div>
-
-        {/* FORM */}
-        <div className="card">
-          <h2>Update Shipment Status</h2>
-
-          <form onSubmit={handleSubmit} className="form">
-
-            <input
-              type="text"
-              placeholder="Shipment Reference"
-              required
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-            />
-
-            <div className="row">
-              <input
-                type="text"
-                placeholder="Coordinator Contact"
-                value={formData.logistics_contact}
-                onChange={(e) =>
-                  setFormData({ ...formData, logistics_contact: e.target.value })
-                }
-              />
-
-              <select
-                value={formData.status}
-                onChange={(e) =>
-                  setFormData({ ...formData, status: e.target.value })
-                }
-              >
-                <option value="in_transit">In Transit</option>
-                <option value="delivered">Delivered</option>
-                <option value="pending_pickup">Pending Pickup</option>
-              </select>
-            </div>
-
-            <input
-              type="text"
-              placeholder="Current / Destination Location"
-              value={formData.location}
-              onChange={(e) =>
-                setFormData({ ...formData, location: e.target.value })
-              }
-            />
-
-            {message && <div className="success">{message}</div>}
-
-            <button type="submit" className="submit-btn">
-              Update Shipment
-            </button>
-
-          </form>
-        </div>
-
-        {/* ALL SHIPMENTS */}
-        <div className="card">
-          <h2>All Shipments</h2>
-
-          {shipments.length === 0 ? (
-            <p className="empty">No shipments tracked yet.</p>
-          ) : (
-            shipments.map((shipment) => (
-              <div key={shipment.id} className="shipment-item">
-                <h3>{shipment.title}</h3>
-                <div className="meta">
-                  <span>📍 {shipment.location || "N/A"}</span>
-                  {shipment.logistics_contact && (
-                    <span>👤 {shipment.logistics_contact}</span>
-                  )}
-                </div>
-                <span className={`badge ${shipment.status}`}>
-                  {shipment.status.replace('_', ' ')}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-
-      </main>
-
-      {/* INTERNAL CSS */}
       <style>{`
-        body {
-          margin: 0;
-          font-family: Arial, sans-serif;
-        }
-
-        .container {
-          min-height: 100vh;
-          background: linear-gradient(to bottom right, #eff6ff, #ecfeff);
-        }
-
-        .header {
-          background: white;
-          padding: 20px;
-          border-bottom: 4px solid #3b82f6;
-        }
-
-        .header-content {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .logout-btn {
-          margin-top: 8px;
-          padding: 8px 14px;
-          background: #dbeafe;
-          color: #1e40af;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-
-        .main {
-          padding: 20px;
-          max-width: 1100px;
-          margin: auto;
-        }
-
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-
-        .card {
-          background: white;
-          padding: 20px;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          box-shadow: 0 5px 10px rgba(0,0,0,0.1);
-        }
-
-        .blue {
-          border-left: 5px solid #3b82f6;
-        }
-
-        .form {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-
-        input, select {
-          padding: 8px;
-          border-radius: 8px;
-          border: 1px solid #ddd;
-        }
-
-        .submit-btn {
-          padding: 10px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-
-        .success {
-          background: #d1fae5;
-          color: #065f46;
-          padding: 8px;
-          border-radius: 6px;
-          text-align: center;
-        }
-
-        .shipment-item {
-          background: #eff6ff;
-          padding: 10px;
-          border-left: 4px solid #3b82f6;
-          border-radius: 6px;
-          margin-top: 10px;
-        }
-
-        .meta {
-          display: flex;
-          gap: 10px;
-          font-size: 13px;
-          margin-top: 5px;
-        }
-
-        .badge {
-          display: inline-block;
-          margin-top: 5px;
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-
-        .badge.delivered {
-          background: #d1fae5;
-          color: #065f46;
-        }
-
-        .badge.in_transit,
-        .badge.pending_pickup {
-          background: #dbeafe;
-          color: #1e40af;
-        }
-
-        .empty {
-          text-align: center;
-          color: #555;
-        }
+        .metric-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .logistics-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        @media (max-width: 900px) { .metric-grid--4, .logistics-form-grid { grid-template-columns: 1fr; } }
       `}</style>
-
-    </div>
+    </>
   );
 }
 

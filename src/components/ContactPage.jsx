@@ -19,213 +19,161 @@ function ContactPage() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.content}>
-        <h1 style={styles.title} className="fade-in">Contact Us</h1>
-        <div style={styles.grid}>
-          <div style={styles.card} className="fade-in">
-            <h2 style={styles.cardTitle}>Get In Touch</h2>
-            <div style={styles.contactList}>
-              <div style={styles.contactItem}>
-                <span style={styles.emoji}>📧</span>
-                <div>
-                  <p style={styles.contactLabel}>Email</p>
-                  <p style={styles.contactValue}>support@reliefhub.org</p>
-                </div>
+    <>
+      <section className="contact-page page-shell fade-in">
+        <div className="contact-head">
+          <span className="eyebrow">Support & Coordination</span>
+          <h1 className="page-title">Keep donors, field teams, and recipients connected during every drive.</h1>
+          <p className="page-copy">
+            Use this page as a support touchpoint for platform access, emergency coordination, or partnership inquiries.
+          </p>
+        </div>
+
+        <div className="contact-grid">
+          <article className="section-card contact-card">
+            <h2>Operations desk</h2>
+            <div className="contact-list">
+              <div>
+                <small>Email</small>
+                <strong>support@careconnect.org</strong>
               </div>
-              <div style={styles.contactItem}>
-                <span style={styles.emoji}>📞</span>
-                <div>
-                  <p style={styles.contactLabel}>Phone</p>
-                  <p style={styles.contactValue}>8919910098</p>
-                </div>
+              <div>
+                <small>Phone</small>
+                <strong>+91 89199 10098</strong>
               </div>
-              <div style={styles.contactItem}>
-                <span style={styles.emoji}>📍</span>
-                <div>
-                  <p style={styles.contactLabel}>Address</p>
-                  <p style={styles.contactValue}>123 Relief Street, City, State 12345</p>
-                </div>
+              <div>
+                <small>Coordination center</small>
+                <strong>Relief Operations Hub, Hyderabad</strong>
               </div>
-              <div style={styles.contactItem}>
-                <span style={styles.emoji}>⏰</span>
-                <div>
-                  <p style={styles.contactLabel}>Hours</p>
-                  <p style={styles.contactValue}>24/7 Emergency Support</p>
-                </div>
+              <div>
+                <small>Availability</small>
+                <strong>24/7 emergency support window</strong>
               </div>
             </div>
-          </div>
+          </article>
 
-          <div style={styles.card} className="fade-in">
-            <h2 style={styles.cardTitle}>Send a Message</h2>
-            <form onSubmit={handleSubmit} style={styles.form}>
-              <div style={styles.formGroup}>
-                <label htmlFor="name" style={styles.label}>Name</label>
-                <input
-                  id="name"
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  style={styles.input}
-                  placeholder="Your name"
-                  className="focus-outline"
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label htmlFor="email" style={styles.label}>Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  style={styles.input}
-                  placeholder="your@email.com"
-                  className="focus-outline"
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label htmlFor="subject" style={styles.label}>Subject</label>
-                <input
-                  id="subject"
-                  type="text"
-                  required
-                  value={formData.subject}
-                  onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                  style={styles.input}
-                  placeholder="How can we help?"
-                  className="focus-outline"
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label htmlFor="message" style={styles.label}>Message</label>
-                <textarea
-                  id="message"
-                  required
-                  rows="4"
-                  value={formData.message}
-                  onChange={(e) => setFormData({...formData, message: e.target.value})}
-                  style={{...styles.input, resize: 'none'}}
-                  placeholder="Your message..."
-                  className="focus-outline"
-                />
-              </div>
-              {submitted && (
-                <div style={styles.successMessage}>
-                  Message sent successfully!
-                </div>
-              )}
-              <button
-                type="submit"
-                style={styles.submitButton}
-                className="focus-outline"
-              >
+          <article className="section-card contact-card">
+            <h2>Send a message</h2>
+            <form onSubmit={handleSubmit} className="contact-form">
+              <input
+                id="name"
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Your name"
+                className="contact-input focus-outline"
+              />
+              <input
+                id="email"
+                type="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Email address"
+                className="contact-input focus-outline"
+              />
+              <input
+                id="subject"
+                type="text"
+                required
+                value={formData.subject}
+                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                placeholder="Subject"
+                className="contact-input focus-outline"
+              />
+              <textarea
+                id="message"
+                required
+                rows="5"
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                placeholder="Tell us what you need"
+                className="contact-input contact-textarea focus-outline"
+              />
+              {submitted && <div className="status-banner success">Message queued successfully.</div>}
+              <button type="submit" className="primary-btn focus-outline">
                 Send Message
               </button>
             </form>
-          </div>
+          </article>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <style>{`
+        .contact-page {
+          padding: 34px 0 54px;
+        }
+
+        .contact-head {
+          max-width: 700px;
+          margin-bottom: 26px;
+        }
+
+        .contact-head h1 {
+          font-size: clamp(2.1rem, 5vw, 3.9rem);
+          margin: 18px 0 12px;
+        }
+
+        .contact-grid {
+          display: grid;
+          grid-template-columns: 0.9fr 1.1fr;
+          gap: 22px;
+        }
+
+        .contact-card {
+          padding: 26px;
+        }
+
+        .contact-card h2 {
+          margin-bottom: 18px;
+          font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .contact-list {
+          display: grid;
+          gap: 14px;
+        }
+
+        .contact-list div {
+          padding: 16px;
+          border-radius: var(--radius-md);
+          background: rgba(247, 242, 232, 0.88);
+          border: 1px solid var(--line);
+        }
+
+        .contact-list small {
+          display: block;
+          color: var(--text-faint);
+          margin-bottom: 6px;
+        }
+
+        .contact-form {
+          display: grid;
+          gap: 14px;
+        }
+
+        .contact-input {
+          width: 100%;
+          border: 1px solid var(--line-strong);
+          background: rgba(255, 255, 255, 0.85);
+          border-radius: 16px;
+          padding: 14px 16px;
+        }
+
+        .contact-textarea {
+          resize: vertical;
+          min-height: 130px;
+        }
+
+        @media (max-width: 900px) {
+          .contact-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+    </>
   );
 }
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    background: 'linear-gradient(to bottom right, #faf5ff, #fdf2f8)',
-    padding: '4rem 1.5rem'
-  },
-  content: {
-    maxWidth: '56rem',
-    margin: '0 auto'
-  },
-  title: {
-    fontSize: '3rem',
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: '2rem',
-    textAlign: 'center'
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '2rem'
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: '1rem',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-    padding: '2rem'
-  },
-  cardTitle: {
-    fontSize: '1.5rem',
-    fontWeight: 'bold',
-    color: '#9333ea',
-    marginBottom: '1.5rem'
-  },
-  contactList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
-  },
-  contactItem: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '0.75rem'
-  },
-  emoji: {
-    fontSize: '1.5rem'
-  },
-  contactLabel: {
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: '0.25rem'
-  },
-  contactValue: {
-    color: '#4b5563'
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  label: {
-    color: '#374151',
-    fontWeight: '500',
-    marginBottom: '0.5rem'
-  },
-  input: {
-    width: '100%',
-    padding: '0.5rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.5rem',
-    fontSize: '1rem'
-  },
-  successMessage: {
-    backgroundColor: '#d1fae5',
-    color: '#065f46',
-    padding: '0.5rem 1rem',
-    borderRadius: '0.5rem',
-    textAlign: 'center'
-  },
-  submitButton: {
-    width: '100%',
-    backgroundColor: '#9333ea',
-    color: 'white',
-    padding: '0.75rem',
-    borderRadius: '0.5rem',
-    fontWeight: '600',
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s'
-  }
-};
 
 export default ContactPage;
